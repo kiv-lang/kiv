@@ -1,9 +1,9 @@
 [workspace]
 members = [
     "compiler/kivc",
+    "compiler/kivc-*",
     "driver",
-    "tools/kiv-lsp",
-    "tools/kiv-formatter",
+    "tools/kiv-*"
 ]
 resolver = "2"
 
@@ -14,3 +14,48 @@ edition = "2024"
 license = "MIT OR Apache-2.0"
 homepage = "https://github.com/kiv-lang/kiv"
 repository = "https://github.com/kiv-lang/kiv"
+
+[profile.dev]
+opt-level = 1
+debug = true
+debug-assertions = true
+overflow-checks = true
+lto = false
+panic = "unwind"
+incremental = true
+codegen-units = 256
+
+[profile.release]
+opt-level = 3
+debug = false
+debug-assertions = false
+overflow-checks = false
+lto = "fat"
+panic = "abort"
+incremental = false
+codegen-units = 1
+strip = true
+
+[workspace.dependencies]
+inkwell = { version = "0.6", features = ["llvm18-1"], default-features = false }
+miette = { version = "7", features = ["fancy"] }
+clap = { version = "4", features = ["derive"] }
+tokio = { version = "1", features = ["full"] }
+serde_json = "1"
+thiserror = "2"
+text-size = "1"
+tower-lsp = "0.20"
+env_logger = "0.11"
+
+kivc = { path = "compiler/kivc/" }
+kivc-span = { path = "compiler/kivc-span" }
+kivc-diagnostics = { path = "compiler/kivc-diagnostics" }
+kivc-ast = { path = "compiler/kivc-ast" }
+kivc-lexer = { path = "compiler/kivc-lexer" }
+kivc-parser = { path = "compiler/kivc-parser" }
+kivc-resolve = { path = "compiler/kivc-resolve" }
+kivc-typeck = { path = "compiler/kivc-typeck" }
+kivc-semantic = { path = "compiler/kivc-semantic" }
+kivc-hir = { path = "compiler/kivc-hir" }
+kivc-mir = { path = "compiler/kivc-mir" }
+kivc-codegen = { path = "compiler/kivc-codegen" }

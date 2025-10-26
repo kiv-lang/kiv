@@ -8,3 +8,13 @@ license.workspace = true
 [[bin]]
 name = "kiv-lsp"
 path = "src/main.rs"
+
+[dependencies]
+tower-lsp = { workspace = true }
+tokio = { workspace = true }
+serde_json = { workspace = true }
+env_logger = { workspace = true }
+
+kivc = { workspace = true }
+kivc-span = { workspace = true }
+kivc-diagnostics = { workspace = true }

@@ -1,10 +1,11 @@
 [package]
-name = "kiv-linter"
+name = "kivc-runtime"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
 license.workspace = true
 
-[[bin]]
-name = "kiv-linter"
-path = "src/main.rs"
+[lib]
+crate-type = ["rlib", "staticlib", "cdylib"]
+
+[dependencies]
