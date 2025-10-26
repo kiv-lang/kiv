@@ -10,10 +10,11 @@ name = "kiv-clippy"
 path = "src/main.rs"
 
 [dependencies]
+miette = { workspace = true }
+clap = { workspace = true }
+
 kivc = { workspace = true }
 kivc-ast = { workspace = true }
 kivc-hir = { workspace = true }
 kivc-span = { workspace = true }
 kivc-diagnostics = { workspace = true }
-clap = { workspace = true }
-miette = { workspace = true }

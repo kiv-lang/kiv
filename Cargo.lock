@@ -645,6 +645,8 @@ dependencies = [
  "kivc-lexer",
  "kivc-mir",
  "kivc-parser",
+ "kivc-resolve",
+ "kivc-semantic",
  "kivc-span",
  "kivc-typeck",
  "miette",
@@ -725,6 +727,11 @@ dependencies = [
 [[package]]
 name = "kivc-resolve"
 version = "0.1.0"
+dependencies = [
+ "kivc-diagnostics",
+ "kivc-hir",
+ "kivc-span",
+]
 
 [[package]]
 name = "kivc-runtime"
@@ -733,6 +740,11 @@ version = "0.1.0"
 [[package]]
 name = "kivc-semantic"
 version = "0.1.0"
+dependencies = [
+ "kivc-diagnostics",
+ "kivc-hir",
+ "kivc-span",
+]
 
 [[package]]
 name = "kivc-span"

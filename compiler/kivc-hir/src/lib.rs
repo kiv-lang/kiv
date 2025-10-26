@@ -10,7 +10,11 @@ mod id;
 mod lower;
 mod scope;
 
-pub use hir::{HirBlock, HirExpr, HirExprKind, HirFunDef, HirProgram, HirStmt, HirStmtKind};
+pub use hir::{
+    HirBlock, HirExpr, HirExprKind, HirFunDef, HirParam, HirProgram, HirStmt, HirStmtKind,
+};
 pub use id::{FunId, TypeId, VarId};
 pub use lower::lower_program;
 pub use scope::ScopeStack;
+
+pub use kivc_ast::Literal;

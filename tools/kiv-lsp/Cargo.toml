@@ -10,10 +10,11 @@ name = "kiv-lsp"
 path = "src/main.rs"
 
 [dependencies]
-kivc = { workspace = true }
-kivc-span = { workspace = true }
-kivc-diagnostics = { workspace = true }
 tower-lsp = { workspace = true }
 tokio = { workspace = true }
 serde_json = { workspace = true }
 env_logger = { workspace = true }
+
+kivc = { workspace = true }
+kivc-span = { workspace = true }
+kivc-diagnostics = { workspace = true }

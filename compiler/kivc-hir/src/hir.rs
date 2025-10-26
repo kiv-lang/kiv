@@ -13,7 +13,7 @@ pub struct HirProgram {
 /// A function definition in HIR
 #[derive(Debug, Clone)]
 pub struct HirFunDef {
-    pub id: FunId,
+    pub fun_id: FunId,
     pub name: String,
     pub params: Vec<HirParam>,
     pub return_type: Option<TypeId>,

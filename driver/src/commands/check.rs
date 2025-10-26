@@ -1,7 +1,7 @@
 //! `kiv check` command implementation.
 
 use crate::project::Project;
-use kivc::{CompileResult, CompilerConfig, StopAfter, compile_source};
+use kivc::{CompilerConfig, StopAfter, compile_source};
 use std::env;
 use std::fs;
 
@@ -26,24 +26,22 @@ pub fn check() -> Result<(), Box<dyn std::error::Error>> {
     let source = fs::read_to_string(&main_file)?;
 
     // Configure compiler to stop after type checking
-    let config = CompilerConfig::new().with_stop_after(StopAfter::TypeCheck);
+    let config = CompilerConfig {
+        stop_after: Some(StopAfter::TypeCheck),
+        ..Default::default()
+    };
 
     // Compile
-    let (_session, result) =
-        compile_source(main_file.to_string_lossy().to_string(), source, config);
+    let output = compile_source(&source, &main_file.to_string_lossy(), &config);
 
-    match result {
-        CompileResult::StoppedAtHir(_) => {
-            println!("    Finished checking in ...");
-            Ok(())
+    if output.diagnostics.has_errors() {
+        // Print diagnostics
+        for error in output.diagnostics.errors() {
+            eprintln!("{:?}", miette::Report::new(error.clone()));
         }
-        CompileResult::Failed(diagnostics) => {
-            // Print diagnostics
-            for error in diagnostics.errors() {
-                eprintln!("{:?}", miette::Report::new(error.clone()));
-            }
-            Err("Check failed".into())
-        }
-        _ => Err("Unexpected compilation result".into()),
+        Err("Check failed".into())
+    } else {
+        println!("    Finished checking in ...");
+        Ok(())
     }
 }

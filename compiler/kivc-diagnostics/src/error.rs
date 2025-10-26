@@ -8,18 +8,15 @@ use thiserror::Error;
 /// Main error type for the Kiv compiler.
 ///
 /// Designed to work seamlessly with miette for beautiful error reporting.
-#[derive(Clone, Error, Diagnostic)]
+#[derive(Clone, Error)]
 pub enum KivError {
     /// Syntax error with source location
     #[error("{message}")]
     Syntax {
-        #[source_code]
         src: Arc<dyn miette::SourceCode + Send + Sync>,
-        #[label("{label}")]
         span: SourceSpan,
         message: String,
         label: String,
-        #[help]
         help: Option<String>,
         code: ErrorCode,
     },
@@ -27,13 +24,10 @@ pub enum KivError {
     /// Type error with source location
     #[error("{message}")]
     Type {
-        #[source_code]
         src: Arc<dyn miette::SourceCode + Send + Sync>,
-        #[label("{label}")]
         span: SourceSpan,
         message: String,
         label: String,
-        #[help]
         help: Option<String>,
         code: ErrorCode,
     },
@@ -42,7 +36,6 @@ pub enum KivError {
     #[error("{message}")]
     Io {
         message: String,
-        #[help]
         help: Option<String>,
         code: ErrorCode,
     },
@@ -51,8 +44,17 @@ pub enum KivError {
     #[error("{message}")]
     Generic {
         message: String,
-        #[help]
         help: Option<String>,
+    },
+
+    /// Multi-span error with multiple labeled locations
+    #[error("{message}")]
+    MultiSpan {
+        src: Arc<dyn miette::SourceCode + Send + Sync>,
+        spans: Vec<(SourceSpan, String)>,
+        message: String,
+        help: Option<String>,
+        code: ErrorCode,
     },
 }
 
@@ -132,6 +134,94 @@ impl KivError {
             ErrorCode::new("lint", 0),
         )
     }
+
+    /// Creates a multi-span error showing multiple related locations
+    pub fn multi_span(
+        primary_span: &Span,
+        message: impl Into<String>,
+        primary_label: impl Into<String>,
+        related_spans: Vec<(&Span, String)>,
+        help: Option<String>,
+        code: ErrorCode,
+    ) -> Self {
+        let file = primary_span.file();
+        let source = miette::NamedSource::new(file.name(), file.source().to_string());
+
+        // Create the primary span
+        let primary_source_span = SourceSpan::new(
+            (u32::from(primary_span.offset()) as usize).into(),
+            u32::from(primary_span.len()) as usize,
+        );
+
+        // Create related spans
+        let mut all_spans = vec![(primary_source_span, primary_label.into())];
+        all_spans.extend(related_spans.into_iter().map(|(span, label)| {
+            (
+                SourceSpan::new(
+                    (u32::from(span.offset()) as usize).into(),
+                    u32::from(span.len()) as usize,
+                ),
+                label,
+            )
+        }));
+
+        Self::MultiSpan {
+            src: Arc::new(source),
+            spans: all_spans,
+            message: message.into(),
+            help,
+            code,
+        }
+    }
+}
+
+// Manual implementation of Diagnostic trait for KivError
+impl Diagnostic for KivError {
+    fn code<'a>(&'a self) -> Option<Box<dyn fmt::Display + 'a>> {
+        match self {
+            Self::Syntax { code, .. }
+            | Self::Type { code, .. }
+            | Self::Io { code, .. }
+            | Self::MultiSpan { code, .. } => Some(Box::new(code.clone())),
+            Self::Generic { .. } => None,
+        }
+    }
+
+    fn help<'a>(&'a self) -> Option<Box<dyn fmt::Display + 'a>> {
+        match self {
+            Self::Syntax { help, .. }
+            | Self::Type { help, .. }
+            | Self::Io { help, .. }
+            | Self::Generic { help, .. }
+            | Self::MultiSpan { help, .. } => help.as_ref().map(|h| Box::new(h.as_str()) as Box<dyn fmt::Display>),
+        }
+    }
+
+    fn source_code(&self) -> Option<&dyn miette::SourceCode> {
+        match self {
+            Self::Syntax { src, .. } | Self::Type { src, .. } | Self::MultiSpan { src, .. } => {
+                Some(&**src as &dyn miette::SourceCode)
+            }
+            Self::Io { .. } | Self::Generic { .. } => None,
+        }
+    }
+
+    fn labels(&self) -> Option<Box<dyn Iterator<Item = miette::LabeledSpan> + '_>> {
+        match self {
+            Self::Syntax { span, label, .. } => Some(Box::new(std::iter::once(
+                miette::LabeledSpan::new_with_span(Some(label.clone()), *span),
+            ))),
+            Self::Type { span, label, .. } => Some(Box::new(std::iter::once(
+                miette::LabeledSpan::new_with_span(Some(label.clone()), *span),
+            ))),
+            Self::MultiSpan { spans, .. } => Some(Box::new(
+                spans
+                    .iter()
+                    .map(|(span, label)| miette::LabeledSpan::new_with_span(Some(label.clone()), *span)),
+            )),
+            Self::Io { .. } | Self::Generic { .. } => None,
+        }
+    }
 }
 
 // Manual Debug implementation to handle the non-Debug SourceCode trait object
@@ -179,6 +269,19 @@ impl fmt::Debug for KivError {
                 .field("message", message)
                 .field("help", help)
                 .finish(),
+            Self::MultiSpan {
+                message,
+                spans,
+                help,
+                code,
+                ..
+            } => f
+                .debug_struct("MultiSpan")
+                .field("message", message)
+                .field("spans_count", &spans.len())
+                .field("help", help)
+                .field("code", code)
+                .finish_non_exhaustive(),
         }
     }
 }

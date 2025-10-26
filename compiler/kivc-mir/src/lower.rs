@@ -74,7 +74,7 @@ impl MirLowerer {
         let param_types = fun.params.iter().map(|p| p.ty).collect();
 
         let mut mir_fun = MirFunction::new(
-            fun.id,
+            fun.fun_id,
             fun.name,
             params,
             param_types,
@@ -83,7 +83,7 @@ impl MirLowerer {
         );
 
         // Lower the function body
-        let (entry_block, _) = self.lower_block(fun.body, entry_block_id, None);
+        let (entry_block, _) = self.lower_block(fun.body, entry_block_id, None, fun.return_type);
         mir_fun.add_block(entry_block);
 
         mir_fun
@@ -94,11 +94,14 @@ impl MirLowerer {
         block: HirBlock,
         block_id: BlockId,
         next_block: Option<BlockId>,
+        return_type: Option<TypeId>,
     ) -> (BasicBlock, Option<VarId>) {
         let mut current_block = BasicBlock::new(block_id, MirTerminator::Unreachable);
-        let mut last_value: Option<VarId> = None;
+        let mut last_expr_value: Option<VarId> = None;
 
-        for stmt in block.stmts {
+        let stmts_len = block.stmts.len();
+        
+        for (idx, stmt) in block.stmts.into_iter().enumerate() {
             match stmt.kind {
                 HirStmtKind::Let { var_id, init, .. } => {
                     let operand = self.lower_expr_to_operand(&init, &mut current_block);
@@ -106,7 +109,7 @@ impl MirLowerer {
                         dest: var_id,
                         source: operand,
                     });
-                    last_value = Some(var_id);
+                    // Don't update last_expr_value - this is not an expression statement
                 }
 
                 HirStmtKind::Const { var_id, value, .. } => {
@@ -115,7 +118,7 @@ impl MirLowerer {
                         dest: var_id,
                         source: operand,
                     });
-                    last_value = Some(var_id);
+                    // Don't update last_expr_value - this is not an expression statement
                 }
 
                 HirStmtKind::Return { value } => {
@@ -124,23 +127,44 @@ impl MirLowerer {
                         .map(|v| self.lower_expr_to_operand(v, &mut current_block));
 
                     current_block.terminator = MirTerminator::Return { value: ret_operand };
-                    return (current_block, last_value);
+                    return (current_block, last_expr_value);
                 }
 
                 HirStmtKind::Expr { expr } => {
-                    // Evaluate expression for side effects
-                    let _ = self.lower_expr_to_operand(&expr, &mut current_block);
+                    // If this is the last statement and function has a return type, it might be the return value
+                    let operand = self.lower_expr_to_operand(&expr, &mut current_block);
+                    
+                    if idx == stmts_len - 1 && return_type.is_some() {
+                        // This is the last statement and function has a return type - treat it as implicit return
+                        last_expr_value = match &operand {
+                            MirOperand::Var(var_id) => Some(*var_id),
+                            _ => {
+                                // If it's a literal, we need to store it in a temp variable
+                                let temp_id = VarId::new(self.next_temp_id());
+                                current_block.push_instr(MirInstr::Assign {
+                                    dest: temp_id,
+                                    source: operand,
+                                });
+                                Some(temp_id)
+                            }
+                        };
+                    }
                 }
             }
         }
 
-        // If no explicit return, jump to next block or return void
-        current_block.terminator = match next_block {
-            Some(next) => MirTerminator::Jump { target: next },
-            None => MirTerminator::Return { value: None },
-        };
+        // Set terminator based on whether we have a return value from an expression
+        if let Some(ret_var) = last_expr_value {
+            current_block.terminator = MirTerminator::Return { value: Some(MirOperand::Var(ret_var)) };
+        } else {
+            // If no explicit return, jump to next block or return void
+            current_block.terminator = match next_block {
+                Some(next) => MirTerminator::Jump { target: next },
+                None => MirTerminator::Return { value: None },
+            };
+        }
 
-        (current_block, last_value)
+        (current_block, last_expr_value)
     }
 
     fn lower_expr_to_operand(&mut self, expr: &HirExpr, block: &mut BasicBlock) -> MirOperand {
@@ -216,12 +240,12 @@ impl MirLowerer {
 
                 // Lower then branch
                 let (_then_block, _) =
-                    self.lower_block(then_branch.clone(), then_block_id, Some(merge_block_id));
+                    self.lower_block(then_branch.clone(), then_block_id, Some(merge_block_id), None);
 
                 // Lower else branch if it exists
                 if let Some(else_b) = else_branch {
                     let (_else_block, _) =
-                        self.lower_block(else_b.clone(), else_block_id, Some(merge_block_id));
+                        self.lower_block(else_b.clone(), else_block_id, Some(merge_block_id), None);
                 } else {
                     // Empty else: just jump to merge
                     let _else_block = BasicBlock::new(

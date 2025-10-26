@@ -84,7 +84,7 @@ impl Lowerer {
         self.scopes.pop_scope();
 
         HirFunDef {
-            id: fun_id,
+            fun_id,
             name: fun.name,
             params,
             return_type,
@@ -120,16 +120,9 @@ impl Lowerer {
                 ty,
                 init,
             } => {
-                // Check for redeclaration in current scope
-                if self.scopes.is_declared_in_current(&name) {
-                    self.diagnostics.add(KivError::syntax(
-                        &span,
-                        format!("variable '{}' is already declared in this scope", name),
-                        "redeclared here",
-                        Some("use a different name or remove the previous declaration".to_string()),
-                        kivc_diagnostics::error_code::E001_UNEXPECTED_TOKEN,
-                    ));
-                }
+                // Note: Duplicate variable checking is now done in the resolver phase
+                // (kivc-resolve) where we have access to span information for multi-span errors.
+                // This allows us to show both the original and redeclaration locations.
 
                 let var_id = self.scopes.declare(name.clone());
                 let resolved_ty = ty.as_ref().map(|t| self.resolve_type(t));
@@ -145,15 +138,8 @@ impl Lowerer {
             }
 
             StmtKind::Const { name, value } => {
-                if self.scopes.is_declared_in_current(&name) {
-                    self.diagnostics.add(KivError::syntax(
-                        &span,
-                        format!("constant '{}' is already declared in this scope", name),
-                        "redeclared here",
-                        None,
-                        kivc_diagnostics::error_code::E001_UNEXPECTED_TOKEN,
-                    ));
-                }
+                // Note: Duplicate constant checking is now done in the resolver phase
+                // (kivc-resolve) where we have access to span information for multi-span errors.
 
                 let var_id = self.scopes.declare(name.clone());
                 let value_expr = self.lower_expr(value);

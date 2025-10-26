@@ -173,7 +173,7 @@ impl<'a, 'ctx> LlvmCodegen<'a, 'ctx> {
         &self,
         instr: &MirInstr,
         variables: &mut HashMap<VarId, VarStorage<'ctx>>,
-        _cow_vars: &mut Vec<VarId>,
+        _cow_vars: &mut [VarId],
     ) -> CodegenResult<()> {
         match instr {
             MirInstr::Assign { dest, source } => {
@@ -193,8 +193,26 @@ impl<'a, 'ctx> LlvmCodegen<'a, 'ctx> {
                 let left_val = self.operand_to_value(left, variables)?;
                 let right_val = self.operand_to_value(right, variables)?;
 
-                let var_name = format!("tmp{}", dest.as_usize());
-                let result = self.build_binop(op, left_val, right_val, &var_name)?;
+                // Check if this is Text concatenation (Add operator with pointer operands)
+                let result = if matches!(op, BinOp::Add) && left_val.is_pointer_value() && right_val.is_pointer_value() {
+                    // This is Text + Text concatenation
+                    let text_concat = self.module.get_function("kiv_text_concat").ok_or_else(|| {
+                        CodegenError::UndefinedFunction("kiv_text_concat".to_string())
+                    })?;
+                    
+                    let concat_call = self.builder.build_call(
+                        text_concat,
+                        &[left_val.into(), right_val.into()],
+                        "text_concat"
+                    ).map_err(|e| CodegenError::LlvmError(e.to_string()))?;
+                    
+                    concat_call.try_as_basic_value()
+                        .left()
+                        .ok_or_else(|| CodegenError::General("kiv_text_concat should return a value".to_string()))?
+                } else {
+                    let var_name = format!("tmp{}", dest.as_usize());
+                    self.build_binop(op, left_val, right_val, &var_name)?
+                };
 
                 variables.insert(*dest, VarStorage::Ssa(result));
             }

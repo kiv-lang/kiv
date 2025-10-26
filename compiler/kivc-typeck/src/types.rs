@@ -60,7 +60,21 @@ impl TypeContext {
 
         match op {
             // Arithmetic operators: require numeric types, return same type
-            BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Div => {
+            // Add also supports Text concatenation
+            BinOp::Add => {
+                if !self.are_compatible(left, right) {
+                    return None;
+                }
+
+                match left {
+                    Type::Int | Type::Float => Some(left.clone()),
+                    Type::Text => Some(Type::Text),
+                    Type::Unknown => Some(Type::Unknown),
+                    _ => None,
+                }
+            }
+
+            BinOp::Sub | BinOp::Mul | BinOp::Div => {
                 if !self.are_compatible(left, right) {
                     return None;
                 }

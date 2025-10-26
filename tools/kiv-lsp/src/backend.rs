@@ -1,6 +1,6 @@
 //! LSP backend implementation.
 
-use kivc::{CompileResult, CompilerConfig, StopAfter, compile_source};
+use kivc::{CompilerConfig, StopAfter, compile_source};
 use kivc_diagnostics::KivError;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -46,24 +46,21 @@ impl Backend {
 
     /// Validates a document and publishes diagnostics
     async fn validate_document(&self, uri: &Url, text: &str) {
-        let config = CompilerConfig::new().with_stop_after(StopAfter::TypeCheck);
+        let config = CompilerConfig {
+            stop_after: Some(StopAfter::TypeCheck),
+            ..Default::default()
+        };
 
-        let (_session, result) = compile_source(uri.to_string(), text.to_string(), config);
+        let output = compile_source(text, uri.as_ref(), &config);
 
         let mut diagnostics = Vec::new();
 
-        match result {
-            CompileResult::Failed(diag_collector) => {
-                for error in diag_collector.errors() {
-                    if let Some(diagnostic) = kiv_error_to_diagnostic(error) {
-                        diagnostics.push(diagnostic);
-                    }
+        if output.diagnostics.has_errors() {
+            for error in output.diagnostics.errors() {
+                if let Some(diagnostic) = kiv_error_to_diagnostic(error) {
+                    diagnostics.push(diagnostic);
                 }
             }
-            CompileResult::StoppedAtHir(_) => {
-                // Success, no errors
-            }
-            _ => {}
         }
 
         self.client

@@ -1,12 +1,78 @@
 use crate::KivError;
+use std::fmt;
+
+/// Diagnostic level (error, warning, info, etc.)
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DiagnosticLevel {
+    Error,
+    Warning,
+    Info,
+}
+
+/// A diagnostic entry with level and error
+#[derive(Clone)]
+pub struct Diagnostic {
+    level: DiagnosticLevel,
+    error: KivError,
+}
+
+impl Diagnostic {
+    pub fn error(error: KivError) -> Self {
+        Self {
+            level: DiagnosticLevel::Error,
+            error,
+        }
+    }
+
+    pub fn warning(error: KivError) -> Self {
+        Self {
+            level: DiagnosticLevel::Warning,
+            error,
+        }
+    }
+
+    pub fn info(error: KivError) -> Self {
+        Self {
+            level: DiagnosticLevel::Info,
+            error,
+        }
+    }
+
+    pub fn level(&self) -> DiagnosticLevel {
+        self.level
+    }
+
+    pub fn as_error(&self) -> &KivError {
+        &self.error
+    }
+}
+
+impl fmt::Display for Diagnostic {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.level {
+            DiagnosticLevel::Error => write!(f, "error: {}", self.error),
+            DiagnosticLevel::Warning => write!(f, "warning: {}", self.error),
+            DiagnosticLevel::Info => write!(f, "info: {}", self.error),
+        }
+    }
+}
+
+impl fmt::Debug for Diagnostic {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Diagnostic")
+            .field("level", &self.level)
+            .field("error", &self.error)
+            .finish()
+    }
+}
 
 /// A collector for multiple diagnostics.
 ///
 /// Useful for collecting errors during compilation phases without immediately
 /// aborting, allowing reporting of multiple errors at once.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct DiagnosticsCollector {
-    errors: Vec<KivError>,
+    diagnostics: Vec<Diagnostic>,
 }
 
 impl DiagnosticsCollector {
@@ -15,58 +81,127 @@ impl DiagnosticsCollector {
         Self::default()
     }
 
-    /// Adds an error to the collection
+    /// Adds an error diagnostic
+    pub fn error(&mut self, error: impl Into<String>) {
+        self.diagnostics
+            .push(Diagnostic::error(KivError::generic(error.into(), None)));
+    }
+
+    /// Adds a warning diagnostic
+    pub fn warning(&mut self, warning: impl Into<String>) {
+        self.diagnostics
+            .push(Diagnostic::warning(KivError::generic(warning.into(), None)));
+    }
+
+    /// Adds an info diagnostic
+    pub fn info(&mut self, info: impl Into<String>) {
+        self.diagnostics
+            .push(Diagnostic::info(KivError::generic(info.into(), None)));
+    }
+
+    /// Adds a diagnostic to the collection
+    pub fn add_diagnostic(&mut self, diag: Diagnostic) {
+        self.diagnostics.push(diag);
+    }
+
+    /// Adds an error to the collection (backwards compatibility)
     pub fn add(&mut self, error: KivError) {
-        self.errors.push(error);
+        self.diagnostics.push(Diagnostic::error(error));
     }
 
     /// Adds an error by reference (cloning it)
     pub fn add_ref(&mut self, error: &KivError) {
-        self.errors.push(error.clone());
-    }
-
-    /// Clones the collector (creates a new one with the same errors)
-    pub fn clone_box(&self) -> DiagnosticsCollector {
-        let mut diag = DiagnosticsCollector::new();
-        for error in &self.errors {
-            diag.add_ref(error);
-        }
-        diag
+        self.diagnostics.push(Diagnostic::error(error.clone()));
     }
 
     /// Returns true if any errors have been collected
     pub fn has_errors(&self) -> bool {
-        !self.errors.is_empty()
+        self.diagnostics
+            .iter()
+            .any(|d| d.level == DiagnosticLevel::Error)
+    }
+
+    /// Returns true if any warnings have been collected
+    pub fn has_warnings(&self) -> bool {
+        self.diagnostics
+            .iter()
+            .any(|d| d.level == DiagnosticLevel::Warning)
     }
 
     /// Returns the number of errors collected
     pub fn error_count(&self) -> usize {
-        self.errors.len()
+        self.diagnostics
+            .iter()
+            .filter(|d| d.level == DiagnosticLevel::Error)
+            .count()
     }
 
-    /// Returns a reference to the collected errors
-    pub fn errors(&self) -> &[KivError] {
-        &self.errors
+    /// Returns the number of warnings collected
+    pub fn warning_count(&self) -> usize {
+        self.diagnostics
+            .iter()
+            .filter(|d| d.level == DiagnosticLevel::Warning)
+            .count()
     }
 
-    /// Consumes the collector and returns the collected errors
+    /// Returns the total number of diagnostics
+    pub fn count(&self) -> usize {
+        self.diagnostics.len()
+    }
+
+    /// Returns a reference to all diagnostics
+    pub fn diagnostics(&self) -> &[Diagnostic] {
+        &self.diagnostics
+    }
+
+    /// Returns a reference to the collected errors (for backwards compatibility)
+    pub fn errors(&self) -> Vec<&KivError> {
+        self.diagnostics
+            .iter()
+            .filter(|d| d.level == DiagnosticLevel::Error)
+            .map(|d| &d.error)
+            .collect()
+    }
+
+    /// Consumes the collector and returns the collected diagnostics
+    pub fn into_diagnostics(self) -> Vec<Diagnostic> {
+        self.diagnostics
+    }
+
+    /// Consumes the collector and returns only errors (for backwards compatibility)
     pub fn into_errors(self) -> Vec<KivError> {
-        self.errors
+        self.diagnostics
+            .into_iter()
+            .filter(|d| d.level == DiagnosticLevel::Error)
+            .map(|d| d.error)
+            .collect()
     }
 
-    /// Clears all collected errors
+    /// Clears all collected diagnostics
     pub fn clear(&mut self) {
-        self.errors.clear();
+        self.diagnostics.clear();
+    }
+
+    /// Merges another collector into this one
+    pub fn merge(&mut self, other: DiagnosticsCollector) {
+        self.diagnostics.extend(other.diagnostics);
     }
 
     /// Creates a Result based on whether errors were collected
     ///
-    /// Returns Ok(value) if no errors, Err(errors) otherwise
-    pub fn finish<T>(self, value: T) -> Result<T, Vec<KivError>> {
+    /// Returns Ok(value) if no errors, Err(self) otherwise
+    pub fn finish<T>(self, value: T) -> Result<T, Self> {
         if self.has_errors() {
-            Err(self.errors)
+            Err(self)
         } else {
             Ok(value)
+        }
+    }
+
+    /// Print all diagnostics
+    pub fn print_all(&self) {
+        for diag in &self.diagnostics {
+            eprintln!("{}", diag);
         }
     }
 }
@@ -83,6 +218,7 @@ mod tests {
         let collector = DiagnosticsCollector::new();
         assert!(!collector.has_errors());
         assert_eq!(collector.error_count(), 0);
+        assert_eq!(collector.count(), 0);
     }
 
     #[test]
@@ -90,7 +226,7 @@ mod tests {
         let mut collector = DiagnosticsCollector::new();
 
         let file = SourceFile::new("test.kiv".to_string(), "let x = 42;".to_string());
-        let span = Span::new(Arc::clone(&file), 4.into(), 1.into());
+        let span = Span::new(file.clone(), 4.into(), 1.into());
 
         collector.add(KivError::syntax(
             &span,
@@ -102,13 +238,29 @@ mod tests {
 
         assert!(collector.has_errors());
         assert_eq!(collector.error_count(), 1);
+        assert_eq!(collector.count(), 1);
     }
 
     #[test]
-    fn test_multiple_errors() {
+    fn test_warnings() {
         let mut collector = DiagnosticsCollector::new();
 
-        let file = SourceFile::new("test.kiv".to_string(), "let x = 42;".to_string());
+        collector.warning("unused variable");
+
+        assert!(!collector.has_errors());
+        assert!(collector.has_warnings());
+        assert_eq!(collector.warning_count(), 1);
+        assert_eq!(collector.count(), 1);
+    }
+
+    #[test]
+    fn test_multiple_diagnostics() {
+        let mut collector = DiagnosticsCollector::new();
+
+        let file = Arc::new(SourceFile::new(
+            "test.kiv".to_string(),
+            "let x = 42;".to_string(),
+        ));
         let span1 = Span::new(Arc::clone(&file), 0.into(), 3.into());
         let span2 = Span::new(Arc::clone(&file), 4.into(), 1.into());
 
@@ -119,6 +271,7 @@ mod tests {
             None,
             E001_UNEXPECTED_TOKEN,
         ));
+        collector.warning("warning 1");
         collector.add(KivError::syntax(
             &span2,
             "error 2",
@@ -127,7 +280,9 @@ mod tests {
             E002_EXPECTED_TOKEN,
         ));
 
+        assert_eq!(collector.count(), 3);
         assert_eq!(collector.error_count(), 2);
+        assert_eq!(collector.warning_count(), 1);
     }
 
     #[test]
@@ -135,7 +290,7 @@ mod tests {
         let mut collector = DiagnosticsCollector::new();
 
         let file = SourceFile::new("test.kiv".to_string(), "let x = 42;".to_string());
-        let span = Span::new(Arc::clone(&file), 4.into(), 1.into());
+        let span = Span::new(file.clone(), 4.into(), 1.into());
 
         collector.add(KivError::syntax(
             &span,
@@ -147,7 +302,7 @@ mod tests {
 
         collector.clear();
         assert!(!collector.has_errors());
-        assert_eq!(collector.error_count(), 0);
+        assert_eq!(collector.count(), 0);
     }
 
     #[test]
@@ -163,7 +318,7 @@ mod tests {
         let mut collector = DiagnosticsCollector::new();
 
         let file = SourceFile::new("test.kiv".to_string(), "let x = 42;".to_string());
-        let span = Span::new(Arc::clone(&file), 4.into(), 1.into());
+        let span = Span::new(file.clone(), 4.into(), 1.into());
 
         collector.add(KivError::syntax(
             &span,
@@ -175,6 +330,21 @@ mod tests {
 
         let result = collector.finish(42);
         assert!(result.is_err());
-        assert_eq!(result.unwrap_err().len(), 1);
+    }
+
+    #[test]
+    fn test_merge() {
+        let mut collector1 = DiagnosticsCollector::new();
+        let mut collector2 = DiagnosticsCollector::new();
+
+        collector1.error("error 1");
+        collector2.error("error 2");
+        collector2.warning("warning 1");
+
+        collector1.merge(collector2);
+
+        assert_eq!(collector1.error_count(), 2);
+        assert_eq!(collector1.warning_count(), 1);
+        assert_eq!(collector1.count(), 3);
     }
 }

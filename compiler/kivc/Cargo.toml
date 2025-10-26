@@ -23,6 +23,8 @@ kivc-lexer = { workspace = true }
 kivc-ast = { workspace = true }
 kivc-parser = { workspace = true }
 kivc-hir = { workspace = true }
+kivc-resolve = { workspace = true }
 kivc-typeck = { workspace = true }
+kivc-semantic = { workspace = true }
 kivc-mir = { workspace = true }
 kivc-codegen = { workspace = true }

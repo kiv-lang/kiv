@@ -8,7 +8,6 @@ mod formatter;
 use clap::Parser;
 use formatter::Formatter;
 use kivc::compile_to_ast;
-use kivc_span::SourceFile;
 use std::fs;
 use std::path::PathBuf;
 use std::process;
@@ -81,8 +80,7 @@ fn format_file(
     let source = fs::read_to_string(path)?;
 
     // Parse to AST
-    let file = SourceFile::new(path.to_string_lossy().to_string(), source.clone());
-    let ast = compile_to_ast(file)
+    let ast = compile_to_ast(&source, &path.to_string_lossy())
         .map_err(|diag| format!("Parse error: {} error(s)", diag.errors().len()))?;
 
     // Format the AST

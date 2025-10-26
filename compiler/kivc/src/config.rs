@@ -1,76 +1,98 @@
-//! Compiler configuration.
+//! Compiler configuration and settings.
 
-/// Optimization level
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+use std::fmt;
+
+/// Optimization level for code generation
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum OptLevel {
-    /// No optimization (debug builds)
+    /// No optimizations (-O0)
+    #[default]
     None,
-    /// Basic optimizations
-    Basic,
-    /// Aggressive optimizations
+    /// Basic optimizations (-O1)
+    Less,
+    /// Standard optimizations (-O2)
+    Default,
+    /// Aggressive optimizations (-O3)
     Aggressive,
 }
 
-impl Default for OptLevel {
-    fn default() -> Self {
-        Self::None
-    }
-}
-
-/// Compiler configuration
-#[derive(Debug, Clone)]
-pub struct CompilerConfig {
-    /// Optimization level
-    pub opt_level: OptLevel,
-
-    /// Emit debug information
-    pub debug_info: bool,
-
-    /// Stop after a certain stage (for debugging)
-    pub stop_after: Option<StopAfter>,
-}
-
-/// Stage to stop compilation after
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum StopAfter {
-    Lex,
-    Parse,
-    Hir,
-    TypeCheck,
-    Mir,
-}
-
-impl Default for CompilerConfig {
-    fn default() -> Self {
-        Self {
-            opt_level: OptLevel::None,
-            debug_info: true,
-            stop_after: None,
+impl OptLevel {
+    pub fn from_u8(level: u8) -> Self {
+        match level {
+            0 => OptLevel::None,
+            1 => OptLevel::Less,
+            2 => OptLevel::Default,
+            3 => OptLevel::Aggressive,
+            _ => OptLevel::Default,
         }
     }
 }
 
+impl fmt::Display for OptLevel {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            OptLevel::None => write!(f, "O0"),
+            OptLevel::Less => write!(f, "O1"),
+            OptLevel::Default => write!(f, "O2"),
+            OptLevel::Aggressive => write!(f, "O3"),
+        }
+    }
+}
+
+/// Stage at which to stop compilation
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StopAfter {
+    /// Stop after parsing (AST generation)
+    Parse,
+    /// Stop after HIR generation
+    Hir,
+    /// Stop after type checking
+    TypeCheck,
+    /// Stop after MIR generation
+    Mir,
+}
+
+impl fmt::Display for StopAfter {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            StopAfter::Parse => write!(f, "parse"),
+            StopAfter::Hir => write!(f, "hir"),
+            StopAfter::TypeCheck => write!(f, "typecheck"),
+            StopAfter::Mir => write!(f, "mir"),
+        }
+    }
+}
+
+/// Compiler configuration
+#[derive(Debug, Clone, Default)]
+pub struct CompilerConfig {
+    /// Optimization level
+    #[allow(clippy::derivable_impls)]
+    pub opt_level: OptLevel,
+
+    /// Stop compilation after a specific stage
+    pub stop_after: Option<StopAfter>,
+
+    /// Measure compilation time for each stage
+    pub measure_time: bool,
+}
+
 impl CompilerConfig {
-    /// Creates a new compiler configuration with default settings
-    pub fn new() -> Self {
-        Self::default()
+    pub fn new(opt_level: OptLevel) -> Self {
+        Self {
+            opt_level,
+            stop_after: None,
+            measure_time: false,
+        }
     }
 
-    /// Sets the optimization level
-    pub fn with_opt_level(mut self, level: OptLevel) -> Self {
-        self.opt_level = level;
+    pub fn with_stop_after(mut self, stop_after: StopAfter) -> Self {
+        self.stop_after = Some(stop_after);
         self
     }
 
-    /// Enables or disables debug information
-    pub fn with_debug_info(mut self, enabled: bool) -> Self {
-        self.debug_info = enabled;
-        self
-    }
-
-    /// Sets the stage to stop after
-    pub fn with_stop_after(mut self, stage: StopAfter) -> Self {
-        self.stop_after = Some(stage);
+    pub fn with_time_measurement(mut self, measure: bool) -> Self {
+        self.measure_time = measure;
         self
     }
 }

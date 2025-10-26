@@ -5,7 +5,7 @@
 mod lint;
 
 use clap::Parser;
-use kivc::{CompileResult, CompilerConfig, StopAfter, compile_source};
+use kivc::{CompilerConfig, StopAfter, compile_source};
 use kivc_diagnostics::DiagnosticsCollector;
 use lint::all_rules;
 use std::fs;
@@ -77,17 +77,17 @@ fn lint_file(path: &PathBuf) -> Result<DiagnosticsCollector, Box<dyn std::error:
     let source = fs::read_to_string(path)?;
 
     // Compile to HIR
-    let config = CompilerConfig::new().with_stop_after(StopAfter::Hir);
+    let config = CompilerConfig {
+        stop_after: Some(StopAfter::Hir),
+        ..Default::default()
+    };
 
-    let (_session, result) = compile_source(path.to_string_lossy().to_string(), source, config);
+    let output = compile_source(&source, &path.to_string_lossy(), &config);
 
-    let hir = match result {
-        CompileResult::StoppedAtHir(hir) => hir,
-        CompileResult::Failed(diagnostics) => {
-            return Ok(diagnostics);
-        }
+    let hir = match output.hir {
+        Some(hir) if !output.diagnostics.has_errors() => hir,
         _ => {
-            return Err("Unexpected compilation result".into());
+            return Ok(output.diagnostics);
         }
     };
 

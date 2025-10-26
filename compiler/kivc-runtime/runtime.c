@@ -145,4 +145,3 @@ void kiv_panic(Text* message) {
     }
     exit(1);
 }
-
